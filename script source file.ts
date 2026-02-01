@@ -98,3 +98,11 @@ function main(workbook: ExcelScript.Workbook, sheetName: string): string {
 
     return JSON.stringify(result);
 }
+
+
+
+
+
+
+
+"result": "{\"sourceFileName\":\"New Microsoft Excel Worksheet\",\"sourceColumns\":[\"Certificate NBR\",\"Individual Name\",\"Diagnosis\"],\"data\":[[null,null,\"\"],[null,null,\"\"],[null,null,\"\"],[null,null,\"\"],[null,null,\"\"],[null,null,\"\"],[null,null,\"\"],[null,null,\"\"],[null,null,\"\"],[null,null,\"\"],[\"0\",null,\"\"],[\"1\",null,\"\"],[\"2\",null,\"\"],[\"3\",null,\"\"],[\"4\",null,\"\"],[\"5\",null,\"\"],[\"6\",null,\"\"],[\"7\",null,\"\"],[\"8\",null,\"\"],[\"9\",null,\"\"]]}
