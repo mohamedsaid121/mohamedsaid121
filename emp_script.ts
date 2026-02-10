@@ -1,12 +1,12 @@
 function main(workbook: ExcelScript.Workbook, sourceDataJson: string): void {
     // CONFIGURATION
     let columnMapping: { [key: string]: string } = {
-        "Staff ID": "Staff ID",
+        "Staff ID": "Staff ID",           // This maps from Table column to Source column
         "Emp Name": "Full Name",
         "Diagnose": "SHW Feedback ",
         "Number of Sick Days": "Number of Sick Days",
         "Original Diagnose": "Diagnosis",
-        "Department": "Department"
+        "Department": "Department"  // Department doesn't exist in source - will be looked up
     };
     
     interface SourceData {
@@ -35,11 +35,13 @@ function main(workbook: ExcelScript.Workbook, sourceDataJson: string): void {
                     h === null || h === undefined ? "" : String(h).trim()
                 );
                 
-                // Find column indices - using more flexible matching
+                console.log("Employee sheet headers:", empHeaders);
+                
+                // Find Staff ID column in EmployeesData - looking for "Users Sys Id"
                 const staffIdIndex = empHeaders.findIndex(h => 
-                    h.toLowerCase().includes("staff") || 
-                    h.toLowerCase().includes("id") ||
-                    h.toLowerCase().includes("sys")
+                    h.toLowerCase() === "users sys id" || 
+                    h.toLowerCase() === "users sysid" ||
+                    h.toLowerCase().includes("users") && h.toLowerCase().includes("sys") && h.toLowerCase().includes("id")
                 );
                 
                 const deptIndex = empHeaders.findIndex(h => 
@@ -60,13 +62,14 @@ function main(workbook: ExcelScript.Workbook, sourceDataJson: string): void {
                                 (row[deptIndex] || "").toString().trim() : "Unknown";
                             departmentMap[staffId] = department;
                             loadedCount++;
-                            console.log(`Mapped Staff ID: ${staffId} -> Department: ${department}`);
+                            if (loadedCount <= 5) { // Log first 5 for debugging
+                                console.log(`Mapped Staff ID: "${staffId}" -> Department: "${department}"`);
+                            }
                         }
                     }
                     console.log(`Loaded ${loadedCount} employee departments into memory`);
-                    console.log("Sample mappings:", Object.keys(departmentMap).slice(0, 5).map(k => `${k}:${departmentMap[k]}`));
                 } else {
-                    console.log("ERROR: Could not find Staff ID column in EmployeesData sheet");
+                    console.log("ERROR: Could not find 'Users Sys Id' column in EmployeesData sheet");
                     console.log("Available columns:", empHeaders);
                 }
             } else {
@@ -84,12 +87,14 @@ function main(workbook: ExcelScript.Workbook, sourceDataJson: string): void {
     // Parsing json source data
     const parsed: SourceData = JSON.parse(sourceDataJson) as SourceData;
     const sourceFileName: string = parsed.sourceFileName;
-    const sourceColumns: string[] = parsed.sourceColumns;
+    const sourceColumns: string[] = parsed.sourceColumns.map(col => col.trim());
     const rowsToAppend: string[][] = parsed.data;
 
     console.log("Source columns:", sourceColumns);
     console.log("Number of rows to append:", rowsToAppend.length);
-    console.log("First row sample:", rowsToAppend[0]);
+    if (rowsToAppend.length > 0) {
+        console.log("First row sample:", rowsToAppend[0]);
+    }
 
     if (!rowsToAppend || rowsToAppend.length === 0) {
         console.log("No data to append");
@@ -114,10 +119,16 @@ function main(workbook: ExcelScript.Workbook, sourceDataJson: string): void {
         let sourceRow = rowsToAppend[i];
         let newRow: string[] = new Array(headers.length).fill("");
 
-        // Get Staff ID from source row using the source column name
-        const sourceStaffIdIndex = sourceColumns.indexOf("Staff ID");
-        const staffId = sourceStaffIdIndex !== -1 ? 
-            (sourceRow[sourceStaffIdIndex] || "").toString().trim() : "";
+        // Get Staff ID from source row - look for "Staff ID" column
+        const sourceStaffIdIndex = sourceColumns.findIndex(col => 
+            col.toLowerCase() === "staff id" || 
+            col.toLowerCase().includes("staff") && col.toLowerCase().includes("id")
+        );
+        
+        let staffId = "";
+        if (sourceStaffIdIndex !== -1) {
+            staffId = (sourceRow[sourceStaffIdIndex] || "").toString().trim();
+        }
         
         console.log(`Row ${i}: Staff ID from source = "${staffId}"`);
 
@@ -130,11 +141,15 @@ function main(workbook: ExcelScript.Workbook, sourceDataJson: string): void {
             if (destIndex !== -1) {
                 if (destCol === "Department") {
                     // Lookup department using the Staff ID
-                    const department = departmentMap[staffId] || "Not Found";
+                    const department = departmentMap[staffId] || 
+                                     (staffId ? "Department Not Found" : "Missing Staff ID");
                     newRow[destIndex] = department;
-                    console.log(`Row ${i}: Department lookup for ${staffId} = "${department}"`);
+                    console.log(`Row ${i}: Department lookup for "${staffId}" = "${department}"`);
                 } else if (sourceIndex !== -1) {
                     newRow[destIndex] = sourceRow[sourceIndex] || "";
+                } else if (destCol === "Staff ID") {
+                    // Special case: If Staff ID column in table, use the staffId we extracted
+                    newRow[destIndex] = staffId;
                 }
             } else {
                 console.log(`Warning: Destination column "${destCol}" not found in table`);
@@ -147,7 +162,6 @@ function main(workbook: ExcelScript.Workbook, sourceDataJson: string): void {
             newRow[sourceIndex] = sourceFileName;
         }
 
-        console.log(`Row ${i} prepared:`, newRow.filter(cell => cell !== ""));
         newRows.push(newRow);
     }
 
@@ -163,8 +177,9 @@ function main(workbook: ExcelScript.Workbook, sourceDataJson: string): void {
     // Debug: Show a few rows from the table to verify
     const tableRange = table.getRangeBetweenHeaderAndTotal();
     const tableValues = tableRange.getValues();
-    console.log("First 3 rows from table after update:");
-    for (let i = 0; i < Math.min(3, tableValues.length); i++) {
+    const rowsToShow = Math.min(3, tableValues.length);
+    console.log(`First ${rowsToShow} rows from table after update:`);
+    for (let i = 0; i < rowsToShow; i++) {
         console.log(`Row ${i}:`, tableValues[i]);
     }
 }
