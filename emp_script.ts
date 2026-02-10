@@ -6,7 +6,7 @@ function main(workbook: ExcelScript.Workbook, sourceDataJson: string): void {
         "Diagnose": "SHW Feedback ",
         "Number of Sick Days": "Number of Sick Days",
         "Original Diagnose": "Diagnosis",
-        <span style="color:blue;font-weight:bold">"Department": "Department"</span>  // ADDED
+        "Department": "Department"  // ADDED
     };
     
     interface SourceData {
@@ -17,10 +17,70 @@ function main(workbook: ExcelScript.Workbook, sourceDataJson: string): void {
 
     const sourceColumnName = "Source";
     
-    <span style="color:blue;font-weight:bold">// === EMPLOYEES FILE CONFIGURATION ===
-    const EMPLOYEES_FILE_PATH = "/sites/YOURSITE/Shared Documents/Employees.xlsx"; // UPDATE THIS PATH
-    const EMPLOYEES_STAFFID_COLUMN = "Users Sys Id"; // Column name in Employees file
-    const EMPLOYEES_DEPT_COLUMN = "Department"; // Column name in Employees file</span>
+    // === LOAD EMPLOYEES FROM SAME WORKBOOK ===
+    console.log("Loading employee departments from EmployeesData sheet...");
+    const departmentMap: {[staffId: string]: string} = {};
+    
+    try {
+        // Get the EmployeesData sheet from CURRENT workbook
+        const employeesSheet = workbook.getWorksheet("EmployeesData");
+        
+        if (employeesSheet) {
+            const employeesRange = employeesSheet.getUsedRange();
+            
+            if (employeesRange) {
+                const allEmployees = employeesRange.getValues() as string[][];
+                console.log(`Found ${allEmployees.length} rows in EmployeesData sheet`);
+                
+                // Get headers (first row)
+                const empHeaders = allEmployees[0].map(h => 
+                    h === null || h === undefined ? "" : String(h).trim()
+                );
+                
+                // Find column indices
+                const staffIdIndex = empHeaders.findIndex(h => 
+                    h.toLowerCase().includes("users sys id") || 
+                    h.toLowerCase().includes("users sysid") ||
+                    h.toLowerCase().includes("sys id")
+                );
+                
+                const deptIndex = empHeaders.findIndex(h => 
+                    h.toLowerCase().includes("department") || 
+                    h.toLowerCase().includes("dept")
+                );
+                
+                console.log(`Staff ID column index: ${staffIdIndex}`);
+                console.log(`Department column index: ${deptIndex}`);
+                
+                if (staffIdIndex !== -1) {
+                    // Load all employees into dictionary
+                    let loadedCount = 0;
+                    for (let i = 1; i < allEmployees.length; i++) {
+                        const row = allEmployees[i];
+                        const staffId = (row[staffIdIndex] || "").toString().trim();
+                        if (staffId) {
+                            const department = deptIndex !== -1 ? 
+                                (row[deptIndex] || "").toString().trim() : "";
+                            departmentMap[staffId] = department;
+                            loadedCount++;
+                        }
+                    }
+                    console.log(`Loaded ${loadedCount} employee departments into memory`);
+                } else {
+                    console.log("ERROR: Could not find Staff ID column in EmployeesData sheet");
+                    console.log("Available columns:", empHeaders);
+                }
+            } else {
+                console.log("ERROR: EmployeesData sheet is empty");
+            }
+        } else {
+            console.log("WARNING: EmployeesData sheet not found in workbook");
+            console.log("Available sheets:", workbook.getWorksheets().map(s => s.getName()));
+        }
+    } catch (error) {
+        console.log(`ERROR loading employee data: ${error}`);
+        console.log("Continuing without department data");
+    }
 
     // Parsing json source data
     const parsed: SourceData = JSON.parse(sourceDataJson) as SourceData;
@@ -42,63 +102,6 @@ function main(workbook: ExcelScript.Workbook, sourceDataJson: string): void {
     }
     
     let headers = table.getHeaderRowRange().getValues()[0] as string[];
-    
-    <span style="color:blue;font-weight:bold">// === LOAD EMPLOYEES FILE AND CREATE DEPARTMENT MAPPING ===
-    console.log("Loading employee departments from: " + EMPLOYEES_FILE_PATH);
-    const departmentMap: {[staffId: string]: string} = {};
-    
-    try {
-        // Open Employees workbook
-        const employeesWorkbook = ExcelScript.Workbook.open(EMPLOYEES_FILE_PATH);
-        const employeesSheet = employeesWorkbook.getActiveWorksheet();
-        const employeesRange = employeesSheet.getUsedRange();
-        
-        if (employeesRange) {
-            const allEmployees = employeesRange.getValues() as string[][];
-            console.log(`Employees file has ${allEmployees.length} rows`);
-            
-            // Find Staff ID and Department columns (case-insensitive)
-            const empHeaders = allEmployees[0].map(h => 
-                h === null || h === undefined ? "" : String(h).trim()
-            );
-            
-            // Look for "Users Sys Id" column (exact match with case-insensitive)
-            const staffIdIndex = empHeaders.findIndex(h => 
-                h.toLowerCase() === EMPLOYEES_STAFFID_COLUMN.toLowerCase()
-            );
-            
-            const deptIndex = empHeaders.findIndex(h => 
-                h.toLowerCase() === EMPLOYEES_DEPT_COLUMN.toLowerCase()
-            );
-            
-            console.log(`Staff ID column ("${EMPLOYEES_STAFFID_COLUMN}") found at index: ${staffIdIndex}`);
-            console.log(`Department column ("${EMPLOYEES_DEPT_COLUMN}") found at index: ${deptIndex}`);
-            
-            if (staffIdIndex !== -1) {
-                // Load all employees into dictionary
-                let loadedCount = 0;
-                for (let i = 1; i < allEmployees.length; i++) {
-                    const row = allEmployees[i];
-                    const staffId = (row[staffIdIndex] || "").toString().trim();
-                    if (staffId) {
-                        const department = deptIndex !== -1 ? 
-                            (row[deptIndex] || "").toString().trim() : "";
-                        departmentMap[staffId] = department;
-                        loadedCount++;
-                    }
-                }
-                console.log(`Loaded ${loadedCount} employee departments into memory`);
-            } else {
-                console.log(`ERROR: Could not find "${EMPLOYEES_STAFFID_COLUMN}" column in Employees file`);
-                console.log("Available columns:", empHeaders);
-            }
-        } else {
-            console.log("ERROR: Employees file is empty");
-        }
-    } catch (error) {
-        console.log(`ERROR loading Employees file: ${error}`);
-        console.log("Continuing without department data");
-    }</span>
 
     // Prepare data for appending
     let newRows: string[][] = [];
@@ -114,13 +117,13 @@ function main(workbook: ExcelScript.Workbook, sourceDataJson: string): void {
             const destIndex = headers.indexOf(destCol);
 
             if (sourceIndex !== -1 && destIndex !== -1) {
-                <span style="color:blue;font-weight:bold">if (destCol === "Department") {
-                    // Lookup department from Employees file
+                if (destCol === "Department") {
+                    // Lookup department from EmployeesData sheet
                     const staffId = sourceRow[0] || ""; // Staff ID from first column
                     newRow[destIndex] = departmentMap[staffId] || "";
-                } else {</span>
+                } else {
                     newRow[destIndex] = sourceRow[sourceIndex] || "";
-                <span style="color:blue;font-weight:bold">}</span>
+                }
             }
         }
 
@@ -136,7 +139,7 @@ function main(workbook: ExcelScript.Workbook, sourceDataJson: string): void {
     
     if (newRows.length > 0) {
         table.addRows(-1, newRows);
-        <span style="color:blue;font-weight:bold">console.log(`Added ${newRows.length} rows with department lookup`);</span>
+        console.log(`Added ${newRows.length} rows with department lookup`);
     }
 
     
